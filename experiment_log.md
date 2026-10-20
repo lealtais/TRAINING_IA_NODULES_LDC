@@ -166,3 +166,24 @@ To validate whether the discarded DeepLesion model retained any multi-organ gene
 1. **Empirical Justification of Dataset Selection:** Direct quantitative comparison proving why general-purpose medical datasets (DeepLesion) fail compared to specialized multi-annotator consensus datasets (LIDC-IDRI).
 2. **Clinical Bounding Box Ground Truth:** Use of multi-radiologist mask union ($\cup$) to minimize subjective inter-observer variability.
 3. **Threshold Calibration Strategy:** Clear demonstration that default object detection confidence thresholds (`0.25`) are clinically inappropriate, and that establishing `conf = 0.35` achieves the necessary trade-off for zero false alarms in non-pathological tissue.
+
+---
+
+## 10. Methodological Limitations & Next Steps Roadmap
+
+### 10.1 Identified Limitations (Critical Self-Assessment)
+1. **Slice-Level vs. Patient-Level Split (Data Leakage Risk):**
+   * In `run-03`, the train/validation split (`85% / 15%`) was performed across the list of individual slices rather than grouping by patient ID. Because a single pulmonary nodule spans multiple adjacent CT slices separated by millimeters, neighboring slices of the same patient appeared in both training and validation sets.
+   * Consequently, the validation metric (**mAP@50 = 0.754**) is likely inflated by intra-patient correlation, which partially explains the performance drop observed on completely unseen external images.
+2. **Dataset Diversity vs. Raw Volume:**
+   * The bottleneck for out-of-distribution generalization is anatomical and pathological variety rather than raw slice count. The 38 GB raw LIDC-IDRI dataset (`lidcidri30`, DICOM + XML) originates from the same cohort as `zhangweiled/lidcidri` and does not introduce missing patterns such as diffuse miliary micronodules.
+3. **Sample Size in External Validation:**
+   * Initial out-of-distribution tests (4–5 internet images) are valuable for hypothesis generation (e.g., identifying failure on miliary patterns and confirming modality specificity on X-rays), but a larger, systematically logged external test set is required for statistical robustness.
+
+### 10.2 Action Plan (In Priority Order)
+1. **Retrain with Patient-Level Split (`train_lidc_por_paciente.py`):** Group all slices by patient ID (`LIDC-IDRI-XXXX`) before splitting into train/val on `zhangweiled/lidcidri`. This establishes an honest, leak-free baseline for the thesis defense.
+2. **Include Negative Samples (Healthy Lung Slices):** Incorporate slices without nodule annotations as background images during training to further suppress false positives on normal vascular structures.
+3. **Expand External Evaluation:** Increase the number of independent external test images and document each case systematically in this log.
+4. **Address Multiple Small / Miliary Nodules:** Source an auxiliary dataset containing sub-centimetric and diffuse micronodules to overcome the single-nodule bias of LIDC-IDRI.
+5. **Selective Use of Raw LIDC-IDRI (`lidcidri30`, 38 GB):** Use only if schedule permits, primarily to extract negative (healthy) slices, avoiding unnecessary overhead from full DICOM/XML parsing.
+6. **Edge Export & Application Integration:** Export the validated checkpoint to **TFLite / ONNX** and integrate it into the final clinical triage interface once the patient-split baseline is consolidated.
