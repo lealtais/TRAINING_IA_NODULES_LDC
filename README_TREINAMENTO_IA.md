@@ -1,6 +1,11 @@
 # Guia Completo do Treinamento de IA: Detecção Precoce de Nódulos Pulmonares (TCC)
 
 > Documento consolidado com base no repositório [lealtais/TRAINING_IA_NODULES_LDC](https://github.com/lealtais/TRAINING_IA_NODULES_LDC) e nas avaliações do modelo `best.pt`.
+>
+> **Documentos Complementares no Repositório:**
+> * **[`METODOLOGIA_TCC_ABNT.md`](METODOLOGIA_TCC_ABNT.md):** Texto formal acadêmico (padrão ABNT NBR 14724 / NBR 6023) detalhando a escolha e fusão das bases de dados, a justificativa matemática/estatística da divisão por paciente, proporção de amostras negativas e referências bibliográficas prontas para o TCC.
+> * **[`GUIA_INFORMAL_ESTUDO_E_DUVIDAS.md`](GUIA_INFORMAL_ESTUDO_E_DUVIDAS.md):** Guia de bolso informal explicando todas as dúvidas sobre o funcionamento do YOLO, das pastas, dos arquivos `.txt`, da proporção dos bancos e do fluxo 100% remoto (Google Colab + GitHub) sem depender do PC local.
+> * **[`train_lidc_por_paciente.py`](train_lidc_por_paciente.py):** Script completo pronto para rodar no Google Colab (divisão por paciente + adição de tomografias de pulmão saudável).
 
 ---
 

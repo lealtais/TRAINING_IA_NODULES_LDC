@@ -42,10 +42,14 @@ Inference across 40 real thoracic CT slices (Adenocarcinoma, Large Cell Carcinom
 
 ```
 .
-├── README.md                 # Project overview, key metrics, and visual summary
-├── experiment_log.md         # Full research log: dataset methodology, curves, threshold tests & bugs
-├── deeplesion_tests.md       # Multi-organ generalization experiments with DeepLesion
-└── assets/                   # Training curves, threshold montages, and inference test images
+├── README.md                          # Project overview, key metrics, and visual summary (English)
+├── README_TREINAMENTO_IA.md           # Full project guide in Portuguese
+├── METODOLOGIA_TCC_ABNT.md            # Formal academic methodology & dataset justification (ABNT standard)
+├── GUIA_INFORMAL_ESTUDO_E_DUVIDAS.md  # Informal study guide, Q&A, and 100% remote cloud workflow notes
+├── experiment_log.md                  # Full research log: dataset methodology, curves, threshold tests & bugs
+├── deeplesion_tests.md                # Multi-organ generalization experiments with DeepLesion
+├── train_lidc_por_paciente.py         # Complete Colab training script (patient-level split + healthy CT controls)
+└── assets/                            # Training curves, threshold montages, and inference test images
 ```
 
 ---
