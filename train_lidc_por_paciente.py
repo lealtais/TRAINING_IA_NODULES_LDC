@@ -1,14 +1,26 @@
 # -*- coding: utf-8 -*-
-!pip install ultralytics kagglehub scikit-learn -q
+!pip install ultralytics kagglehub scikit-learn requests opencv-python -q
 
 import os
+import json
 import shutil
+import requests
 import kagglehub
+import cv2
 import numpy as np
 from PIL import Image
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 from ultralytics import YOLO
+from google.colab import drive, files
+
+# =============================================================================
+# 0) CONECTAR AO GOOGLE DRIVE LOGO NO INÍCIO (GARANTE QUE NADA SE PERCA)
+# =============================================================================
+drive.mount("/content/drive", force_remount=True)
+PASTA_DRIVE = Path("/content/drive/MyDrive/TCC_NODULOS_LIDC_PACIENTE")
+PASTA_DRIVE.mkdir(parents=True, exist_ok=True)
+print(f"✅ Google Drive conectado! Tudo será salvo automaticamente em: {PASTA_DRIVE}")
 
 # =============================================================================
 # 1) BAIXAR OS BANCOS DE DADOS ONLINE (NO SERVIDOR DO COLAB)
@@ -120,11 +132,9 @@ for split, lista_imgs in (("train", norm_train), ("val", norm_val)):
         destino_img = SAIDA / "images" / split / nome_saida
         destino_lbl = SAIDA / "labels" / split / f"normal_saudavel_{idx:04d}.txt"
 
-        # Converte para escala de cinza (L) igual ao LIDC-IDRI e salva como PNG
         with Image.open(caminho_img) as im:
             im.convert("L").save(destino_img)
 
-        # Arquivo .txt em branco indica ao YOLO que não há nódulo na imagem
         destino_lbl.write_text("")
 
 print(f"Imagens de pulmão saudável adicionadas: {len(imagens_normais)} (Treino: {len(norm_train)} | Val: {len(norm_val)})")
@@ -152,3 +162,97 @@ model_lidc.train(
     name="lidc_paciente_com_saudaveis",
     optimizer="AdamW"
 )
+
+PASTA_TREINO = Path("/content/runs/detect/lidc_paciente_com_saudaveis")
+CAMINHO_BEST = PASTA_TREINO / "weights" / "best.pt"
+
+# =============================================================================
+# 6) BAIXAR FOTOS DE CÂNCER DE PULMÃO DA INTERNET E TESTAR O NOVO best.pt
+# =============================================================================
+print("\n=== 6) BAIXANDO IMAGENS DE CÂNCER DE PULMÃO DA INTERNET PARA TESTE ===")
+PASTA_TESTE_NET = Path("/content/testes_internet")
+PASTA_ORIGINAIS = PASTA_TESTE_NET / "originais"
+PASTA_RESULTADOS = PASTA_TESTE_NET / "predicoes"
+PASTA_ORIGINAIS.mkdir(parents=True, exist_ok=True)
+PASTA_RESULTADOS.mkdir(parents=True, exist_ok=True)
+
+HEADERS = {"User-Agent": "Mozilla/5.0"}
+REPO = "hallowshaw/Lung-Cancer-Prediction-using-CNN-and-Transfer-Learning"
+BRANCH = "main"
+tree_url = f"https://api.github.com/repos/{REPO}/git/trees/{BRANCH}?recursive=1"
+tree_data = requests.get(tree_url, headers=HEADERS, timeout=20).json().get("tree", [])
+
+categorias = ["adenocarcinoma", "large.cell.carcinoma", "squamous.cell.carcinoma", "normal"]
+arquivos_teste = {}
+
+for cat in categorias:
+    cat_dir = PASTA_ORIGINAIS / cat.replace(".", "_")
+    cat_dir.mkdir(parents=True, exist_ok=True)
+    arquivos_teste[cat] = []
+
+    cat_files = [
+        f["path"] for f in tree_data
+        if f["path"].startswith(f"dataset/test/{cat}/")
+        and f["path"].lower().endswith((".png", ".jpg", ".jpeg"))
+    ]
+    for file_path in cat_files[:10]:
+        clean_name = Path(file_path).name.replace(" ", "_").replace("(", "").replace(")", "")
+        local_path = cat_dir / clean_name
+        raw_url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{file_path}"
+        r = requests.get(raw_url, headers=HEADERS, timeout=20)
+        if r.status_code == 200:
+            local_path.write_bytes(r.content)
+            arquivos_teste[cat].append(local_path)
+
+modelo_final = YOLO(str(CAMINHO_BEST))
+resumo_testes = {}
+
+for limiar in [0.20, 0.25, 0.30, 0.35, 0.40]:
+    conf_dir = PASTA_RESULTADOS / f"conf_{int(limiar * 100)}"
+    conf_dir.mkdir(parents=True, exist_ok=True)
+    resumo_testes[str(limiar)] = {}
+    print(f"\n--- Resultados no Limiar conf = {limiar} ---")
+
+    for cat, lista_imgs in arquivos_teste.items():
+        detectados = 0
+        confs = []
+        for p in lista_imgs:
+            res = modelo_final.predict(source=str(p), conf=limiar, imgsz=224, verbose=False)[0]
+            if len(res.boxes) > 0:
+                detectados += 1
+                for b in res.boxes:
+                    confs.append(float(b.conf[0].cpu().numpy()))
+            cv2.imwrite(str(conf_dir / f"{cat}_{p.name}"), res.plot())
+
+        taxa = (detectados / max(1, len(lista_imgs))) * 100
+        media_c = float(np.mean(confs)) if confs else 0.0
+        resumo_testes[str(limiar)][cat] = {
+            "detectados": f"{detectados}/{len(lista_imgs)}",
+            "taxa_pct": round(taxa, 1),
+            "conf_media": round(media_c, 3)
+        }
+        print(f"  {cat:25s} -> Detectou: {detectados:2d}/{len(lista_imgs):2d} ({taxa:5.1f}%) | Conf. Média: {media_c:.3f}")
+
+(PASTA_TESTE_NET / "resumo_testes_internet.json").write_text(
+    json.dumps(resumo_testes, indent=2, ensure_ascii=False), encoding="utf-8"
+)
+
+# =============================================================================
+# 7) SALVAR NO GOOGLE DRIVE E BAIXAR DIRETO PARA O SEU PC (PASTA DOWNLOADS)
+# =============================================================================
+shutil.copytree(PASTA_TREINO, PASTA_DRIVE / "lidc_paciente_com_saudaveis", dirs_exist_ok=True)
+shutil.copytree(PASTA_TESTE_NET, PASTA_DRIVE / "testes_internet", dirs_exist_ok=True)
+shutil.copy2(CAMINHO_BEST, PASTA_DRIVE / "best.pt")
+print(f"\n✅ Tudo salvo no seu Google Drive em: {PASTA_DRIVE}")
+
+# Compacta tudo (pesos best.pt + gráficos + fotos da internet testadas) e baixa pro PC!
+PACOTE_FINAL = Path("/content/pacote_completo_tcc")
+PACOTE_FINAL.mkdir(parents=True, exist_ok=True)
+shutil.copy2(CAMINHO_BEST, PACOTE_FINAL / "best.pt")
+shutil.copytree(PASTA_TREINO, PACOTE_FINAL / "treino_yolo", dirs_exist_ok=True)
+shutil.copytree(PASTA_TESTE_NET, PACOTE_FINAL / "testes_internet", dirs_exist_ok=True)
+
+shutil.make_archive("/content/RESULTADO_COMPLETO_TCC", "zip", PACOTE_FINAL)
+files.download(str(CAMINHO_BEST))
+files.download("/content/RESULTADO_COMPLETO_TCC.zip")
+print("🎉 Downloads de 'best.pt' e 'RESULTADO_COMPLETO_TCC.zip' iniciados para o seu PC!")
